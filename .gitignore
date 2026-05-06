@@ -1,0 +1,19 @@
+
+
+# Dependencias
+node_modules/
+
+
+
+# Build
+.next/
+dist/
+build/
+
+# Editor
+.vscode/
+.idea/
+
+# Sistema
+.DS_Store
+Thumbs.db
