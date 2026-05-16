@@ -1,9 +1,9 @@
 // lib/api.ts
 
-// 🔹 Variables de entorno (Next.js usa process.env)
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE;
-const INSTITUCION_ID = process.env.NEXT_PUBLIC_INSTITUCION_ID;
-const API_TOKEN = process.env.NEXT_PUBLIC_API_TOKEN;
+// 🔹 Variables de entorno con valores por defecto
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'https://apiadministrador.upea.bo/api/v2';
+const INSTITUCION_ID = process.env.NEXT_PUBLIC_INSTITUCION_ID || '39';
+const API_TOKEN = process.env.NEXT_PUBLIC_API_TOKEN || '';
 const STORAGE_BASE = process.env.NEXT_PUBLIC_API_STORAGE || 'https://archivosminio.upea.bo/archivospaginasnode';
 
 // Headers comunes con token
@@ -12,13 +12,29 @@ const getHeaders = () => ({
   'Content-Type': 'application/json',
 });
 
-// 🔹 Función genérica para fetch
-export const fetchAPI = async <T>(endpoint: string): Promise<T> => {
+// 🔹 Fetch para CLIENTE ('use client') - SIN next: { revalidate }
+export const fetchAPIClient = async <T>(endpoint: string): Promise<T> => {
   const url = `${API_BASE}${endpoint}`;
   
   const response = await fetch(url, {
     headers: getHeaders(),
-    next: { revalidate: 3600 } // Cache por 1 hora (Next.js 13+)
+    cache: 'no-store', // Cliente: sin caché para datos dinámicos
+  });
+
+  if (!response.ok) {
+    throw new Error(`Error ${response.status}: ${url}`);
+  }
+
+  return await response.json();
+};
+
+// 🔹 Fetch para SERVIDOR (Server Components, Route Handlers) - CON revalidate
+export const fetchAPIServer = async <T>(endpoint: string): Promise<T> => {
+  const url = `${API_BASE}${endpoint}`;
+  
+  const response = await fetch(url, {
+    headers: getHeaders(),
+    next: { revalidate: 3600 }, // ✅ Solo válido en servidor
   });
 
   if (!response.ok) {
@@ -31,7 +47,6 @@ export const fetchAPI = async <T>(endpoint: string): Promise<T> => {
 // 🔹 Helper para construir URLs de imágenes/PDFs
 export const getAssetUrl = (filename: string, folder: string): string => {
   if (!filename) return '';
-  // Si ya es URL completa, retornarla
   if (filename.startsWith('http://') || filename.startsWith('https://')) {
     return filename;
   }
@@ -41,37 +56,24 @@ export const getAssetUrl = (filename: string, folder: string): string => {
 // 🔹 Función para obtener URL directa (usada en portadas, logos, etc.)
 export const getDirectUrl = (urlOrPath: string | null | undefined, fallback?: string): string => {
   if (!urlOrPath) return fallback || '';
-  
-  // Si ya es URL completa (http/https), retornarla directa
   if (urlOrPath.startsWith('http://') || urlOrPath.startsWith('https://')) {
     return urlOrPath;
   }
-  
-  // Si el path ya incluye una carpeta (imagenes/, convocatorias/, etc.)
   if (urlOrPath.includes('/')) {
     return `${STORAGE_BASE}/${urlOrPath}`;
   }
-  
-  // Por defecto, asumir que está en /imagenes/
   return `${STORAGE_BASE}/imagenes/${urlOrPath}`;
 };
 
-// 🔹 Función ESPECÍFICA para convocatorias (intenta múltiples rutas)
+// 🔹 Función ESPECÍFICA para convocatorias
 export const getConvocatoriaImageUrl = (path: string | null | undefined): string => {
   if (!path) return '';
-  
-  // Si ya es URL completa, retornarla
   if (path.startsWith('http://') || path.startsWith('https://')) {
     return path;
   }
-  
-  // Si ya incluye carpeta, usar tal cual
   if (path.includes('/')) {
     return `${STORAGE_BASE}/${path}`;
   }
-  
-  // Intentar en orden: convocatorias/, imagenes/, root
-  // Nota: Para producción idealmente verificar cuál existe realmente
   return `${STORAGE_BASE}/convocatorias/${path}`;
 };
 
@@ -83,29 +85,25 @@ export const getCursoImageUrl = (path: string | null | undefined): string => {
   return `${STORAGE_BASE}/cursos/${path}`;
 };
 
-// 🔹 Endpoints específicos de la API
+// 🔹 Endpoints específicos de la API - USAN fetchAPIClient por defecto
 export const api = {
-  // 👉 GET /api/v2/institucionesPrincipal/10
   getInstitucion: () => 
-    fetchAPI<InstitucionResponse>(`/institucionesPrincipal/${INSTITUCION_ID}`),
+    fetchAPIClient<InstitucionResponse>(`/institucionesPrincipal/${INSTITUCION_ID}`),
   
   getCursos: () => 
-    fetchAPI<CursosResponse>(`/institucion/${INSTITUCION_ID}/cursos-academicos`),
+    fetchAPIClient<CursosResponse>(`/institucion/${INSTITUCION_ID}/cursos-academicos`),
   
-  // 👉 GET /api/v2/institucion/10/contenido
   getContenido: () => 
-    fetchAPI<ContenidoResponse>(`/institucion/${INSTITUCION_ID}/contenido`),
+    fetchAPIClient<ContenidoResponse>(`/institucion/${INSTITUCION_ID}/contenido`),
   
-  // 👉 GET /api/v2/institucion/10/gacetaEventos
   getGacetaEventos: () => 
-    fetchAPI<GacetaEventosResponse>(`/institucion/${INSTITUCION_ID}/gacetaEventos`),
+    fetchAPIClient<GacetaEventosResponse>(`/institucion/${INSTITUCION_ID}/gacetaEventos`),
   
-  // 👉 GET /api/v2/institucion/10/recursos
   getRecursos: () => 
-    fetchAPI<RecursosResponse>(`/institucion/${INSTITUCION_ID}/recursos`),
+    fetchAPIClient<RecursosResponse>(`/institucion/${INSTITUCION_ID}/recursos`),
 };
 
-// 🔹 Tipos para Links Externos/Internos
+// 🔹 Tipos (sin cambios)
 export interface LinkExternoInterno {
   id_link: number;
   imagen: string;
@@ -206,6 +204,15 @@ export interface Servicio {
   imagen: any[];
 }
 
+export interface VideoInstitucional {
+  video_id: number;
+  video_enlace: string;
+  video_titulo: string;
+  video_breve_descripcion: string;
+  video_estado: number;
+  video_tipo: string;
+}
+
 // 🔹 Respuestas de la API
 export interface InstitucionData {
   institucion_id: number;
@@ -228,6 +235,8 @@ export interface InstitucionData {
   institucion_sobre_ins: string;
   institucion_api_google_map: string;
   institucion_slogan?: string;
+  institucion_link_video_vision?: string;
+  institucion_videos?: VideoInstitucional[];
   colorinstitucion: Array<{
     id_color: number;
     color_primario: string;
@@ -252,7 +261,7 @@ export interface ContenidoResponse {
   autoridad: any[];
   portada: Portada[];
   ubicacion: any[];
-  upea_videos: any[];
+  upea_videos: VideoInstitucional[];
 }
 
 export interface CursosResponse {
@@ -272,13 +281,5 @@ export interface GacetaEventosResponse {
   cursos: Curso[];  
   convocatorias: Convocatoria[];
   upea_gaceta_universitaria?: any[];
-  upea_videos?: any[];
-}
-export interface VideoInstitucional {
-  video_id: number;
-  video_enlace: string;
-  video_titulo: string;
-  video_breve_descripcion: string;
-  video_estado: number;
-  video_tipo: string;
+  upea_videos?: VideoInstitucional[];
 }
