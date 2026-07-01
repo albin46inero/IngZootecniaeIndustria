@@ -4,15 +4,9 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Menu, X, ChevronDown } from 'lucide-react';
-import { api, type InstitucionData } from '@/lib/api';
+import { api, type InstitucionData, getDirectUrl } from '@/lib/api';
 
 const SERVICIO_ADMIN_URL = process.env.NEXT_PUBLIC_SERVICIO_ADMIN_URL || 'https://servicioadministrador.upea.bo/sign-in';
-
-const getImageUrl = (urlOrPath: string | null | undefined): string => {
-  if (!urlOrPath) return '';
-  if (urlOrPath.startsWith('http')) return urlOrPath;
-  return `https://archivosminio.upea.bo/archivospaginasnode/imagenes/logos/${urlOrPath}`;
-};
 
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -21,17 +15,20 @@ export default function Header() {
   const [institucion, setInstitucion] = useState<InstitucionData | null>(null);
   const dropdownTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // 🔹 Detectar scroll para estilo del header
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // 🔹 Cerrar menús al cambiar de ruta
   useEffect(() => {
     setMobileMenuOpen(false);
     setActiveDropdown(null);
   }, []);
 
+  // 🔹 Cargar datos de la institución y colores dinámicos
   useEffect(() => {
     const load = async () => {
       try {
@@ -39,18 +36,27 @@ export default function Header() {
         setInstitucion(res.Descripcion);
         if (res.Descripcion.colorinstitucion?.[0]) {
           const c = res.Descripcion.colorinstitucion[0];
-          document.documentElement.style.setProperty('--color-primario', c.color_primario);
-          document.documentElement.style.setProperty('--color-secundario', c.color_secundario);
-          document.documentElement.style.setProperty('--color-terciario', c.color_terciario);
+          document.documentElement.style.setProperty('--color-primario', c.color_primario || '#6AA942');
+          document.documentElement.style.setProperty('--color-secundario', c.color_secundario || '#235F35');
+          document.documentElement.style.setProperty('--color-terciario', c.color_terciario || '#000000');
         }
       } catch (e) {
-        console.error('Error:', e);
+        console.error('Error cargando institución:', e);
       }
     };
     load();
   }, []);
 
-  // 🔹 Manejar dropdown CON DELAY para que no se cierre rápido
+  // 🔹 Cleanup de CSS variables al desmontar
+  useEffect(() => {
+    return () => {
+      document.documentElement.style.removeProperty('--color-primario');
+      document.documentElement.style.removeProperty('--color-secundario');
+      document.documentElement.style.removeProperty('--color-terciario');
+    };
+  }, []);
+
+  // 🔹 Manejar dropdown CON DELAY
   const handleDropdownEnter = (name: string) => {
     if (dropdownTimeoutRef.current) {
       clearTimeout(dropdownTimeoutRef.current);
@@ -61,9 +67,10 @@ export default function Header() {
   const handleDropdownLeave = () => {
     dropdownTimeoutRef.current = setTimeout(() => {
       setActiveDropdown(null);
-    }, 300); // Delay de 300ms antes de cerrar
+    }, 300);
   };
 
+  // ✅ NAV ITEMS CORREGIDOS - "Investigación" como item independiente
   const navItems = [
     { name: 'Inicio', href: '/', submenu: null },
     { 
@@ -105,20 +112,20 @@ export default function Header() {
       href: '/servicios',
       submenu: [
         { name: 'Servicios', href: '/servicios' },
-        { name: 'Ofertas', href: '/ofertas-academicas' },
+        { name: 'Ofertas', href: '/ofertas' },
         { name: 'Videos', href: '/videos' },
       ]
     },
-    { name: 'Investigación', href: '/instituto-investigacion', submenu: null },
+    // ✅ "Investigación" COMO ITEM INDEPENDIENTE (fuera de "Más")
+   
     { name: 'Contacto', href: '/contacto', submenu: null },
   ];
 
-  const logoUrl = getImageUrl(institucion?.institucion_logo);
+  const logoUrl = institucion?.institucion_logo ? getDirectUrl(institucion.institucion_logo) : '';
 
   return (
     <>
       <style jsx global>{`
-        /* ✅ Rotación 3D del logo - CONSERVADA */
         @keyframes logoRotate3D {
           0% { transform: perspective(1000px) rotateY(0deg); }
           100% { transform: perspective(1000px) rotateY(360deg); }
@@ -131,7 +138,6 @@ export default function Header() {
           animation-play-state: paused;
         }
         
-        /* ✅ Dropdown mejorado - Se mantiene abierto */
         .dropdown-wrapper {
           position: relative;
         }
@@ -151,12 +157,14 @@ export default function Header() {
           visibility: hidden;
           transform: translateY(-10px);
           transition: all 0.2s ease;
+          pointer-events: none;
         }
         .dropdown-wrapper:hover .dropdown-menu,
         .dropdown-menu:hover {
           opacity: 1;
           visibility: visible;
           transform: translateY(0);
+          pointer-events: auto;
         }
         .dropdown-item {
           display: block;
@@ -164,6 +172,7 @@ export default function Header() {
           font-size: 0.875rem;
           color: #374151;
           transition: all 0.2s;
+          text-decoration: none;
         }
         .dropdown-item:hover {
           background: rgba(106, 169, 66, 0.1);
@@ -172,7 +181,8 @@ export default function Header() {
         
         @font-face {
           font-family: 'Forte';
-          src: url('/fonts/Forte.woff2') format('woff2');
+          src: url('/fonts/Forte.woff2') format('woff2'),
+               url('/fonts/Forte.woff') format('woff');
           font-display: swap;
         }
         .font-forte {
@@ -188,16 +198,17 @@ export default function Header() {
         <nav className="w-full px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             
-            {/* LOGO CON ROTACIÓN 3D - CONSERVADA */}
-            <Link href="/" className="flex items-center gap-3 group">
+            {/* LOGO */}
+            <Link href="/" className="flex items-center gap-3 group" aria-label="Ir al inicio">
               <div className="relative">
                 {logoUrl ? (
                   <div className="logo-3d-rotate relative w-10 h-10 sm:w-12 sm:h-12">
                     <Image
                       src={logoUrl}
-                      alt={institucion?.institucion_nombre || 'Logo'}
+                      alt={institucion?.institucion_nombre || 'Logo de Ciencias del Desarrollo'}
                       fill
                       className="object-contain"
+                      sizes="(max-width: 640px) 40px, 48px"
                       priority
                     />
                   </div>
@@ -215,7 +226,7 @@ export default function Header() {
               </div>
             </Link>
 
-            {/* DESKTOP MENU */}
+            {/* MENÚ DESKTOP */}
             <div className="hidden lg:flex items-center gap-1">
               {navItems.map((item) => (
                 <div 
@@ -227,7 +238,7 @@ export default function Header() {
                   {item.submenu ? (
                     <>
                       <button
-                        className={`px-3 py-2 text-white/90 hover:text-white rounded-lg text-sm flex items-center gap-1 transition-colors ${
+                        className={`px-3 py-2 text-white/90 hover:text-white rounded-lg text-sm flex items-center gap-1 transition-colors focus:outline-none focus:ring-2 focus:ring-white/50 ${
                           activeDropdown === item.name ? 'text-[var(--color-primario)]' : ''
                         }`}
                         aria-haspopup="true"
@@ -239,16 +250,17 @@ export default function Header() {
                           className={`transition-transform duration-200 ${
                             activeDropdown === item.name ? 'rotate-180' : ''
                           }`} 
+                          aria-hidden="true"
                         />
                       </button>
                       
-                      {/* Dropdown mejorado - Se mantiene abierto */}
                       <div className="dropdown-menu">
                         {item.submenu.map((sub) => (
                           <Link
                             key={sub.name}
                             href={sub.href}
                             className="dropdown-item font-forte"
+                            onClick={() => setActiveDropdown(null)}
                           >
                             {sub.name}
                           </Link>
@@ -258,7 +270,9 @@ export default function Header() {
                   ) : (
                     <Link 
                       href={item.href}
-                      className="px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 rounded-lg text-sm transition-colors"
+                      className={`px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-white/50 ${
+                        activeDropdown === item.name ? 'text-[var(--color-primario)]' : ''
+                      }`}
                     >
                       {item.name}
                     </Link>
@@ -267,30 +281,31 @@ export default function Header() {
               ))}
             </div>
 
-            {/* LOGIN BUTTON */}
+            {/* BOTÓN INICIAR SESIÓN */}
             <div className="hidden lg:block">
               <a 
                 href={SERVICIO_ADMIN_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="bg-gradient-to-r from-[var(--color-primario)] to-[var(--color-secundario)] text-white px-5 py-2 rounded-full text-sm font-semibold hover:shadow-lg hover:scale-105 transition-all"
+                className="bg-gradient-to-r from-[var(--color-primario)] to-[var(--color-secundario)] text-white px-5 py-2 rounded-full text-sm font-semibold hover:shadow-lg hover:scale-105 transition-all focus:outline-none focus:ring-2 focus:ring-white/50"
               >
                 INICIAR SESIÓN
               </a>
             </div>
 
-            {/* MOBILE MENU BUTTON */}
+            {/* BOTÓN MENÚ MÓVIL */}
             <button 
-              className="lg:hidden p-2 text-white hover:bg-white/10 rounded-lg transition"
+              className="lg:hidden p-2 text-white hover:bg-white/10 rounded-lg transition focus:outline-none focus:ring-2 focus:ring-white/50"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
+              aria-expanded={mobileMenuOpen}
             >
-              {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+              {mobileMenuOpen ? <X size={24} aria-hidden="true" /> : <Menu size={24} aria-hidden="true" />}
             </button>
           </div>
         </nav>
 
-        {/* MOBILE MENU */}
+        {/* MENÚ MÓVIL */}
         {mobileMenuOpen && (
           <div className="lg:hidden bg-white border-t border-gray-200">
             <div className="px-4 py-3 space-y-1 max-h-[80vh] overflow-y-auto">
@@ -299,8 +314,10 @@ export default function Header() {
                   {item.submenu ? (
                     <div>
                       <button
-                        className="w-full flex items-center justify-between px-3 py-2 text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                        className="w-full flex items-center justify-between px-3 py-2 text-gray-800 hover:bg-gray-100 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--color-primario)]"
                         onClick={() => setActiveDropdown(activeDropdown === item.name ? null : item.name)}
+                        aria-expanded={activeDropdown === item.name}
+                        aria-haspopup="true"
                       >
                         <span className="font-medium">{item.name}</span>
                         <ChevronDown 
@@ -308,6 +325,7 @@ export default function Header() {
                           className={`transition-transform ${
                             activeDropdown === item.name ? 'rotate-180' : ''
                           }`} 
+                          aria-hidden="true"
                         />
                       </button>
                       {activeDropdown === item.name && (
@@ -320,7 +338,7 @@ export default function Header() {
                                 setMobileMenuOpen(false);
                                 setActiveDropdown(null);
                               }}
-                              className="block px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors font-forte"
+                              className="block px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors font-forte focus:outline-none focus:ring-2 focus:ring-[var(--color-primario)]"
                             >
                               {sub.name}
                             </Link>
@@ -335,7 +353,7 @@ export default function Header() {
                         setMobileMenuOpen(false);
                         setActiveDropdown(null);
                       }}
-                      className="block px-3 py-2 text-gray-800 hover:bg-gray-100 rounded-lg transition-colors font-forte"
+                      className="block px-3 py-2 text-gray-800 hover:bg-gray-100 rounded-lg transition-colors font-forte focus:outline-none focus:ring-2 focus:ring-[var(--color-primario)]"
                     >
                       {item.name}
                     </Link>
@@ -349,7 +367,7 @@ export default function Header() {
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="w-full bg-gradient-to-r from-[var(--color-primario)] to-[var(--color-secundario)] text-white px-6 py-3 rounded-lg font-semibold text-center block hover:shadow-lg transition-all"
+                  className="w-full bg-gradient-to-r from-[var(--color-primario)] to-[var(--color-secundario)] text-white px-6 py-3 rounded-lg font-semibold text-center block hover:shadow-lg transition-all focus:outline-none focus:ring-2 focus:ring-white/50"
                 >
                   INICIAR SESIÓN
                 </a>
