@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Menu, X, ChevronDown } from 'lucide-react';
@@ -10,12 +10,11 @@ const SERVICIO_ADMIN_URL = process.env.NEXT_PUBLIC_SERVICIO_ADMIN_URL || 'https:
 
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const [openMobileSubmenu, setOpenMobileSubmenu] = useState<string | null>(null);
   const [isScrolled, setIsScrolled] = useState(false);
   const [institucion, setInstitucion] = useState<InstitucionData | null>(null);
-  const dropdownTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 🔹 Detectar scroll para estilo del header
+  // 🔹 Detectar scroll
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
     window.addEventListener('scroll', handleScroll, { passive: true });
@@ -25,10 +24,10 @@ export default function Header() {
   // 🔹 Cerrar menús al cambiar de ruta
   useEffect(() => {
     setMobileMenuOpen(false);
-    setActiveDropdown(null);
+    setOpenMobileSubmenu(null);
   }, []);
 
-  // 🔹 Cargar datos de la institución y colores dinámicos
+  // 🔹 Cargar datos de la institución y colores
   useEffect(() => {
     const load = async () => {
       try {
@@ -47,7 +46,7 @@ export default function Header() {
     load();
   }, []);
 
-  // 🔹 Cleanup de CSS variables al desmontar
+  // 🔹 Limpiar variables CSS al desmontar
   useEffect(() => {
     return () => {
       document.documentElement.style.removeProperty('--color-primario');
@@ -56,21 +55,6 @@ export default function Header() {
     };
   }, []);
 
-  // 🔹 Manejar dropdown CON DELAY
-  const handleDropdownEnter = (name: string) => {
-    if (dropdownTimeoutRef.current) {
-      clearTimeout(dropdownTimeoutRef.current);
-    }
-    setActiveDropdown(name);
-  };
-
-  const handleDropdownLeave = () => {
-    dropdownTimeoutRef.current = setTimeout(() => {
-      setActiveDropdown(null);
-    }, 300);
-  };
-
-  // ✅ NAV ITEMS CORREGIDOS - "Investigación" como item independiente
   const navItems = [
     { name: 'Inicio', href: '/', submenu: null },
     { 
@@ -116,7 +100,6 @@ export default function Header() {
         { name: 'Videos', href: '/videos' },
       ]
     },
-    // ✅ "Investigación" COMO ITEM INDEPENDIENTE (fuera de "Más")
    
     { name: 'Contacto', href: '/contacto', submenu: null },
   ];
@@ -126,6 +109,7 @@ export default function Header() {
   return (
     <>
       <style jsx global>{`
+        /* ✅ Animación 3D del logo */
         @keyframes logoRotate3D {
           0% { transform: perspective(1000px) rotateY(0deg); }
           100% { transform: perspective(1000px) rotateY(360deg); }
@@ -137,15 +121,16 @@ export default function Header() {
         .logo-3d-rotate:hover {
           animation-play-state: paused;
         }
-        
-        .dropdown-wrapper {
+
+        /* ✅ DROPDOWN DESKTOP - CSS puro estable */
+        .nav-item {
           position: relative;
         }
         .dropdown-menu {
           position: absolute;
           top: 100%;
           left: 0;
-          margin-top: 0.25rem;
+          margin-top: 0.5rem;
           min-width: 14rem;
           background: white;
           border-radius: 0.5rem;
@@ -159,26 +144,37 @@ export default function Header() {
           transition: all 0.2s ease;
           pointer-events: none;
         }
-        .dropdown-wrapper:hover .dropdown-menu,
-        .dropdown-menu:hover {
+        /* Puente invisible para que el mouse no pierda el hover al bajar */
+        .nav-item::after {
+          content: '';
+          position: absolute;
+          top: 100%;
+          left: 0;
+          width: 100%;
+          height: 0.75rem;
+          background: transparent;
+        }
+        .nav-item:hover .dropdown-menu {
           opacity: 1;
           visibility: visible;
           transform: translateY(0);
           pointer-events: auto;
         }
-        .dropdown-item {
+        .dropdown-link {
           display: block;
           padding: 0.625rem 1rem;
           font-size: 0.875rem;
           color: #374151;
-          transition: all 0.2s;
           text-decoration: none;
+          cursor: pointer;
+          transition: all 0.2s;
         }
-        .dropdown-item:hover {
+        .dropdown-link:hover {
           background: rgba(106, 169, 66, 0.1);
           color: var(--color-primario, #6AA942);
         }
-        
+
+        /* ✅ Fuente Forte */
         @font-face {
           font-family: 'Forte';
           src: url('/fonts/Forte.woff2') format('woff2'),
@@ -199,13 +195,13 @@ export default function Header() {
           <div className="flex items-center justify-between h-16">
             
             {/* LOGO */}
-            <Link href="/" className="flex items-center gap-3 group" aria-label="Ir al inicio">
+            <Link href="/" className="flex items-center gap-3 group cursor-pointer" aria-label="Ir al inicio">
               <div className="relative">
                 {logoUrl ? (
                   <div className="logo-3d-rotate relative w-10 h-10 sm:w-12 sm:h-12">
                     <Image
                       src={logoUrl}
-                      alt={institucion?.institucion_nombre || 'Logo de Ciencias del Desarrollo'}
+                      alt={institucion?.institucion_nombre || 'Logo'}
                       fill
                       className="object-contain"
                       sizes="(max-width: 640px) 40px, 48px"
@@ -229,39 +225,19 @@ export default function Header() {
             {/* MENÚ DESKTOP */}
             <div className="hidden lg:flex items-center gap-1">
               {navItems.map((item) => (
-                <div 
-                  key={item.name}
-                  className="dropdown-wrapper"
-                  onMouseEnter={() => item.submenu && handleDropdownEnter(item.name)}
-                  onMouseLeave={() => item.submenu && handleDropdownLeave()}
-                >
+                <div key={item.name} className="nav-item">
                   {item.submenu ? (
                     <>
                       <button
-                        className={`px-3 py-2 text-white/90 hover:text-white rounded-lg text-sm flex items-center gap-1 transition-colors focus:outline-none focus:ring-2 focus:ring-white/50 ${
-                          activeDropdown === item.name ? 'text-[var(--color-primario)]' : ''
-                        }`}
-                        aria-haspopup="true"
-                        aria-expanded={activeDropdown === item.name}
+                        type="button"
+                        className="px-3 py-2 text-white/90 hover:text-white rounded-lg text-sm flex items-center gap-1 transition-colors cursor-pointer"
                       >
                         {item.name}
-                        <ChevronDown 
-                          size={14} 
-                          className={`transition-transform duration-200 ${
-                            activeDropdown === item.name ? 'rotate-180' : ''
-                          }`} 
-                          aria-hidden="true"
-                        />
+                        <ChevronDown size={14} className="transition-transform" />
                       </button>
-                      
                       <div className="dropdown-menu">
                         {item.submenu.map((sub) => (
-                          <Link
-                            key={sub.name}
-                            href={sub.href}
-                            className="dropdown-item font-forte"
-                            onClick={() => setActiveDropdown(null)}
-                          >
+                          <Link key={sub.name} href={sub.href} className="dropdown-link font-forte">
                             {sub.name}
                           </Link>
                         ))}
@@ -270,9 +246,7 @@ export default function Header() {
                   ) : (
                     <Link 
                       href={item.href}
-                      className={`px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 rounded-lg text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-white/50 ${
-                        activeDropdown === item.name ? 'text-[var(--color-primario)]' : ''
-                      }`}
+                      className="px-3 py-2 text-white/90 hover:text-white hover:bg-white/10 rounded-lg text-sm transition-colors cursor-pointer"
                     >
                       {item.name}
                     </Link>
@@ -287,7 +261,7 @@ export default function Header() {
                 href={SERVICIO_ADMIN_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="bg-gradient-to-r from-[var(--color-primario)] to-[var(--color-secundario)] text-white px-5 py-2 rounded-full text-sm font-semibold hover:shadow-lg hover:scale-105 transition-all focus:outline-none focus:ring-2 focus:ring-white/50"
+                className="bg-gradient-to-r from-[var(--color-primario)] to-[var(--color-secundario)] text-white px-5 py-2 rounded-full text-sm font-semibold hover:shadow-lg transition-all cursor-pointer"
               >
                 INICIAR SESIÓN
               </a>
@@ -295,12 +269,13 @@ export default function Header() {
 
             {/* BOTÓN MENÚ MÓVIL */}
             <button 
-              className="lg:hidden p-2 text-white hover:bg-white/10 rounded-lg transition focus:outline-none focus:ring-2 focus:ring-white/50"
+              type="button"
+              className="lg:hidden p-2 text-white hover:bg-white/10 rounded-lg transition cursor-pointer"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               aria-label={mobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
               aria-expanded={mobileMenuOpen}
             >
-              {mobileMenuOpen ? <X size={24} aria-hidden="true" /> : <Menu size={24} aria-hidden="true" />}
+              {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
           </div>
         </nav>
@@ -314,21 +289,17 @@ export default function Header() {
                   {item.submenu ? (
                     <div>
                       <button
-                        className="w-full flex items-center justify-between px-3 py-2 text-gray-800 hover:bg-gray-100 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--color-primario)]"
-                        onClick={() => setActiveDropdown(activeDropdown === item.name ? null : item.name)}
-                        aria-expanded={activeDropdown === item.name}
-                        aria-haspopup="true"
+                        type="button"
+                        className="w-full flex items-center justify-between px-3 py-2 text-gray-800 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                        onClick={() => setOpenMobileSubmenu(openMobileSubmenu === item.name ? null : item.name)}
                       >
                         <span className="font-medium">{item.name}</span>
                         <ChevronDown 
                           size={16} 
-                          className={`transition-transform ${
-                            activeDropdown === item.name ? 'rotate-180' : ''
-                          }`} 
-                          aria-hidden="true"
+                          className={`transition-transform ${openMobileSubmenu === item.name ? 'rotate-180' : ''}`} 
                         />
                       </button>
-                      {activeDropdown === item.name && (
+                      {openMobileSubmenu === item.name && (
                         <div className="ml-4 mt-1 space-y-1">
                           {item.submenu.map((sub) => (
                             <Link
@@ -336,9 +307,9 @@ export default function Header() {
                               href={sub.href}
                               onClick={() => {
                                 setMobileMenuOpen(false);
-                                setActiveDropdown(null);
+                                setOpenMobileSubmenu(null);
                               }}
-                              className="block px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors font-forte focus:outline-none focus:ring-2 focus:ring-[var(--color-primario)]"
+                              className="block px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors font-forte cursor-pointer"
                             >
                               {sub.name}
                             </Link>
@@ -351,9 +322,9 @@ export default function Header() {
                       href={item.href}
                       onClick={() => {
                         setMobileMenuOpen(false);
-                        setActiveDropdown(null);
+                        setOpenMobileSubmenu(null);
                       }}
-                      className="block px-3 py-2 text-gray-800 hover:bg-gray-100 rounded-lg transition-colors font-forte focus:outline-none focus:ring-2 focus:ring-[var(--color-primario)]"
+                      className="block px-3 py-2 text-gray-800 hover:bg-gray-100 rounded-lg transition-colors font-forte cursor-pointer"
                     >
                       {item.name}
                     </Link>
@@ -367,7 +338,7 @@ export default function Header() {
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="w-full bg-gradient-to-r from-[var(--color-primario)] to-[var(--color-secundario)] text-white px-6 py-3 rounded-lg font-semibold text-center block hover:shadow-lg transition-all focus:outline-none focus:ring-2 focus:ring-white/50"
+                  className="w-full bg-gradient-to-r from-[var(--color-primario)] to-[var(--color-secundario)] text-white px-6 py-3 rounded-lg font-semibold text-center block hover:shadow-lg transition-all cursor-pointer"
                 >
                   INICIAR SESIÓN
                 </a>
